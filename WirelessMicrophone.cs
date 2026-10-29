@@ -1,8 +1,9 @@
 using TeachingDeviceManagement.Enums;
+using TeachingDeviceManagement.Exceptions;
 
 namespace TeachingDeviceManagement.Devices;
 
-// Thiet bi: Micro khong day
+// Thiet bi: Micro khong day (v2: da them validate va doi thu tu uu tien canh bao Critical)
 public class WirelessMicrophone : TeachingDevice
 {
     public int BatteryLevel { get; private set; }
@@ -17,33 +18,43 @@ public class WirelessMicrophone : TeachingDevice
 
     public void UpdateBatteryLevel(int newLevel)
     {
-        // TODO: can validate 0 - 100
+        // Fix o v2: validate gia tri 0 - 100
+        if (newLevel < 0 || newLevel > 100)
+        {
+            throw new InvalidDeviceReadingException(Id, newLevel, $"Muc pin micro {newLevel}% khong hop le");
+        }
+
         BatteryLevel = newLevel;
 
-        // Loi v1: Kiem tra < 30 truoc, nen khi pin = 0 se bi roi vao Warning thay vi Critical
-        if (newLevel < 30)
+        // Fix o v2: Kiem tra muc 0 truoc de phat Critical, sau do moi den muc duoi 30 cho Warning
+        if (newLevel == 0)
+        {
+            RaiseAlert("Micro het sach pin (0%)!", AlertSeverity.Critical);
+        }
+        else if (newLevel < 30)
         {
             RaiseAlert($"Micro pin yeu: {newLevel}%", AlertSeverity.Warning);
-        }
-        else if (newLevel == 0)
-        {
-            RaiseAlert("Micro het sach pin!", AlertSeverity.Critical);
         }
     }
 
     public void UpdateSignalQuality(int newQuality)
     {
-        // TODO: can validate 0 - 100
+        // Fix o v2: validate gia tri 0 - 100
+        if (newQuality < 0 || newQuality > 100)
+        {
+            throw new InvalidDeviceReadingException(Id, newQuality, $"Chat luong tin hieu micro {newQuality}% khong hop le");
+        }
+
         SignalQuality = newQuality;
 
-        // Loi v1: Tuong tu, tin hieu = 0 bi bat vao Warning truoc
-        if (newQuality < 40)
+        // Fix o v2: Kiem tra tin hieu = 0 truoc de phat Critical
+        if (newQuality == 0)
         {
-            RaiseAlert($"Tin hieu micro chap chon: {newQuality}%", AlertSeverity.Warning);
+            RaiseAlert("Micro mat hoan toan tin hieu (0%)!", AlertSeverity.Critical);
         }
-        else if (newQuality == 0)
+        else if (newQuality < 40)
         {
-            RaiseAlert("Micro mat hoan toan tin hieu!", AlertSeverity.Critical);
+            RaiseAlert($"Chat luong tin hieu micro thap: {newQuality}%", AlertSeverity.Warning);
         }
     }
 }
