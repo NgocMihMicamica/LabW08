@@ -3,7 +3,7 @@ using TeachingDeviceManagement.Subscribers;
 
 namespace TeachingDeviceManagement.Coordinator;
 
-// Lop dieu phoi dang ky va huy dang ky lang nghe su kien
+// Lop dieu phoi dang ky va huy dang ky lang nghe su kien (v2: da bo sung huy maintenanceService)
 public class DeviceMonitoringCoordinator : IDisposable
 {
     private readonly List<TeachingDevice> devices;
@@ -25,8 +25,8 @@ public class DeviceMonitoringCoordinator : IDisposable
 
     public void Subscribe()
     {
-        // Loi v1: Khong co co kiem tra da dang ky chua.
-        // Neu goi Subscribe() nhieu lan se bi dang ky trung lap!
+        // Con sot o v2: van chua dung co chan dang ky trung lap!
+        // Neu ai do vo tinh goi Subscribe() 2 lan thi su kien van bi ban 2 lan.
         foreach (var device in devices)
         {
             device.StatusChanged += auditLogger.HandleStatusChanged;
@@ -37,12 +37,12 @@ public class DeviceMonitoringCoordinator : IDisposable
 
     public void Unsubscribe()
     {
-        // Loi v1: Quen huy dang ky cho maintenanceService!
+        // Fix o v2: da huy du ca 3 subscriber
         foreach (var device in devices)
         {
             device.StatusChanged -= auditLogger.HandleStatusChanged;
             device.AlertRaised -= notificationService.HandleAlert;
-            // TODO: can huy them cho maintenanceService nua
+            device.AlertRaised -= maintenanceService.HandleCriticalAlert;
         }
     }
 
