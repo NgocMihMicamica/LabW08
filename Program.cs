@@ -4,50 +4,119 @@ using TeachingDeviceManagement.Enums;
 using TeachingDeviceManagement.Exceptions;
 using TeachingDeviceManagement.Subscribers;
 
-Console.WriteLine("=== CHUONG TRINH QUAN LY THIET BI PHONG HOC (PHIEN BAN V2 - FIX MOT PHAN) ===");
+Console.WriteLine("======================================================================");
+Console.WriteLine("  CHUONG TRINH QUAN LY THIET BI PHONG HOC (PHIEN BAN V3 - HOAN THIEN) ");
+Console.WriteLine("======================================================================\n");
 
-var projector = new ProjectorRemote("PRJ-01", "Dieu khien may chieu A201");
+// 1. Khoi tao cac thiet bi
+var projector = new ProjectorRemote("PRJ-01", "Dieu khien may chieu phong A201");
 var airCon = new AirConditionerRemote("AC-01", "Dieu hoa phong A201", "A201");
-var mic = new WirelessMicrophone("MIC-01", "Micro khong day A201");
+var mic = new WirelessMicrophone("MIC-01", "Micro khong day phong A201");
 
 var devices = new List<TeachingDevice> { projector, airCon, mic };
 
+// 2. Khoi tao cac subscriber
 var notifyService = new ConsoleNotificationService();
 var auditLogger = new DeviceAuditLogger();
-var maintenance = new MaintenanceService();
+var maintenanceService = new MaintenanceService();
 
-var coordinator = new DeviceMonitoringCoordinator(devices, notifyService, auditLogger, maintenance);
+// 3. Khoi tao Coordinator
+var coordinator = new DeviceMonitoringCoordinator(devices, notifyService, auditLogger, maintenanceService);
 
-// Dang ky 1 lan
+// 4. Test Subscribe: goi 2 lan de kiem chung tinh nang chong duplicate subscriber
+Console.WriteLine("[1] THUC HIEN DANG KY SU KIEN (GOI SUBSCRIBE 2 LAN DE TEST CHONG TRUNG LAP):");
 coordinator.Subscribe();
+coordinator.Subscribe(); // Lan thu 2 phai bi chan, khong bi nhan doi handler!
+Console.WriteLine("-> Dang ky thanh cong va an toan!\n");
 
-Console.WriteLine("\n--- TEST 1: THU NGOAI LE KHI GIA TRI KHONG HOP LE ---");
+// 5. Test thay doi trang thai va ghi audit log
+Console.WriteLine("[2] TEST THAY DOI TRANG THAI THIET BI:");
+projector.ChangeStatus(DeviceStatus.Borrowed);
+projector.ChangeStatus(DeviceStatus.UnderMaintenance);
+// Thu dat lai UnderMaintenance (trung trang thai cu -> khong duoc phat sinh event)
+projector.ChangeStatus(DeviceStatus.UnderMaintenance);
+Console.WriteLine("-> Thay doi trang thai xong.\n");
+
+// 6. Test canh bao pin may chieu (chong spam canh bao trong cung mot phan vung)
+Console.WriteLine("[3] TEST CAP NHAT PIN MAY CHIEU:");
+Console.WriteLine("- Giam pin xuong 18% (duoi 20% -> phai phat Warning):");
+projector.UpdateBatteryLevel(18);
+
+Console.WriteLine("- Giam tiep xuong 12% (van o vung < 20% -> KHONG duoc spam Warning tiep):");
+projector.UpdateBatteryLevel(12);
+
+Console.WriteLine("- Giam tiep xuong 0% (can pin -> phai phat Critical):");
+projector.UpdateBatteryLevel(0);
+Console.WriteLine();
+
+// 7. Test ket noi dieu hoa
+Console.WriteLine("[4] TEST TRANG THAI DIEU HOA:");
+Console.WriteLine("- Chuyen sang mat ket noi (false -> phai phat Critical):");
+airCon.UpdateResponseState(false);
+
+Console.WriteLine("- Tiep tuc goi mat ket noi (false -> KHONG duoc phat lap lai):");
+airCon.UpdateResponseState(false);
+Console.WriteLine();
+
+// 8. Test micro khong day (pin & tin hieu)
+Console.WriteLine("[5] TEST MICRO KHONG DAY:");
+Console.WriteLine("- Micro pin xuong 25% (< 30% -> phat Warning):");
+mic.UpdateBatteryLevel(25);
+
+Console.WriteLine("- Micro tin hieu xuong 0% (0% -> phat Critical):");
+mic.UpdateSignalQuality(0);
+Console.WriteLine();
+
+// 9. Test ngoai le InvalidDeviceReadingException khi du lieu ngoai 0-100
+Console.WriteLine("[6] TEST BAT NGOAI LE DU LIEU DOC KHONG HOP LE (0-100):");
 try
 {
-    projector.UpdateBatteryLevel(150);
+    mic.UpdateBatteryLevel(-5);
 }
 catch (InvalidDeviceReadingException ex)
 {
-    Console.WriteLine($"[Bat duoc loi ngoai le]: Device {ex.DeviceId}, Gia tri loi: {ex.InvalidValue} - {ex.Message}");
+    Console.WriteLine($"[Bat duoc ngoai le thanh cong]: Thiet bi {ex.DeviceId}, Gia tri doc {ex.InvalidValue}: {ex.Message}");
 }
+Console.WriteLine();
 
-Console.WriteLine("\n--- TEST 2: CAP NHAT PIN MAY CHIEU (DA FIX PIN 0 LA CRITICAL) ---");
-projector.UpdateBatteryLevel(15); // Warning
-projector.UpdateBatteryLevel(0);  // Da fix thanh Critical!
+// 10. Test FilteredAlertSubscriber voi delegate custom (Muc 8 trong de bai)
+Console.WriteLine("[7] TEST FILTERED ALERT SUBSCRIBER VOI DELEGATE CUSTOM:");
+var criticalOnlySubscriber = new FilteredAlertSubscriber(
+    alert => alert.Severity == AlertSeverity.Critical,
+    alert => Console.WriteLine($"-> [CUSTOM FILTER DAU RA RIENG] Thiet bi {alert.DeviceId} co su co CRITICAL: {alert.Message}")
+);
 
-Console.WriteLine("\n--- TEST 3: DIEU HOA MAT PHAN HOI (DA CHAN BAN TRUNG) ---");
-airCon.UpdateResponseState(false); // Critical
-airCon.UpdateResponseState(false); // Da chan thanh cong, khong ban duplicate!
+// Dang ky rieng vao su kien cua mic
+mic.AlertRaised += criticalOnlySubscriber.HandleAlert;
+Console.WriteLine("- Cho pin micro ve 0% de kich hoat bo loc critical:");
+mic.UpdateBatteryLevel(0);
 
-Console.WriteLine("\n--- TEST 4: MICRO PIN = 0 VA TIN HIEU = 0 ---");
-mic.UpdateBatteryLevel(0); // Da fix thanh Critical
-mic.UpdateSignalQuality(0); // Da fix thanh Critical
+// Huy dang ky filter rieng
+mic.AlertRaised -= criticalOnlySubscriber.HandleAlert;
+Console.WriteLine();
 
-Console.WriteLine("\n--- TEST 5: SOT O V2 - CO BAN DANG KY TRUNG (SUBSCRIBE 2 LAN) ---");
-// Neu coordinator bi goi subscribe them 1 lan nua:
-coordinator.Subscribe();
-Console.WriteLine("Phat sinh them 1 alert sau khi subscribe 2 lan:");
-projector.UpdateBatteryLevel(10); // Se bi hien thi 2 dong do bi dang ky trung!
+// 11. Kiem tra du lieu luu tru tai cac Subscriber
+Console.WriteLine("[8] KIEM TRA NHAT KY HE THONG (DEVICE AUDIT LOGGER):");
+foreach (var entry in auditLogger.Entries)
+{
+    Console.WriteLine($"  * {entry}");
+}
+Console.WriteLine();
 
+Console.WriteLine("[9] KIEM TRA CAC YEU CAU BAO TRI DUOC TAO (MAINTENANCE SERVICE):");
+foreach (var req in maintenanceService.Requests)
+{
+    Console.WriteLine($"  * {req}");
+}
+Console.WriteLine();
+
+// 12. Test Unsubscribe va Dispose
+Console.WriteLine("[10] TEST HUY DANG KY QUA DISPOSE:");
 coordinator.Dispose();
-Console.WriteLine("\n[v2 ket thuc: da fix duoc validate va do uu tien canh bao, con sot chan dang ky trung lap]");
+
+Console.WriteLine("- Thu thay doi trang thai va giam pin sau khi da dispose:");
+projector.ChangeStatus(DeviceStatus.Available);
+projector.UpdateBatteryLevel(10);
+Console.WriteLine("-> Khong co thong bao nao xuat hien vi tat ca da huy dang ky thanh cong!");
+
+Console.WriteLine("\n=== TOAN BO CAC TRUONG HOP KIEM THU CUA V3 DA HOAN THANH XUAT SAC ===");
